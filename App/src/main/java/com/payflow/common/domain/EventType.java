@@ -1,5 +1,5 @@
-package com.payflow.outbox;
+package com.payflow.common.domain;
 
 public enum EventType {
-    DEPOSIT_REQUEST,WITHDRAWAL_REQUEST
+    USER_CREATED,DEPOSIT_REQUEST,WITHDRAWAL_REQUEST
 }

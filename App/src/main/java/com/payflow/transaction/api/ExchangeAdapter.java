@@ -27,10 +27,10 @@ public class ExchangeAdapter implements ExchangeFacade {
         }
 
 
-        Map<CurrencyEnum, BigDecimal> rates = exchangeRepository
-                .findByCurrencyIn(List.of(from, to))
-                .stream()
-                .collect(Collectors.toMap(ExchangeRate::getCurrency, ExchangeRate::getRateToUsd));
+//        Map<CurrencyEnum, BigDecimal> rates = exchangeRepository
+//                .findByCurrencyIn(List.of(from, to))
+//                .stream()
+//                .collect(Collectors.toMap(ExchangeRate::getCurrency, ExchangeRate::getRateToUsd));
 
         BigDecimal fromRate = from == CurrencyEnum.USD
                 ? BigDecimal.ONE

@@ -16,7 +16,7 @@ target/
 ###files
 .jar
 .env
-.properties
+application.properties
 
 ### IntelliJ IDEA ###
 .idea

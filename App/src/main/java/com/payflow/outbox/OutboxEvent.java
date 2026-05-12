@@ -1,6 +1,7 @@
 package com.payflow.outbox;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.payflow.common.domain.EventType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -29,8 +30,9 @@ public class OutboxEvent {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Enumerated(value = EnumType.STRING)
     @Column(name = "event_type")
-    private String event_type;
+    private EventType eventType;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload",columnDefinition = "jsonb")

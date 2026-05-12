@@ -31,8 +31,8 @@ public class OutboxProcessor {
 
     @Scheduled(fixedDelay = 5000)
     public void processDepositRequests(){
-        Pageable pageRequest = PageRequest.of(0, 20, Sort.by("transactionAt").ascending());
-        Page<OutboxEvent> events = outboxRepository.findPendingTransactions(pageRequest);
+        Pageable pageRequest = PageRequest.of(0, 20, Sort.by("createdAt").ascending());
+        Page<OutboxEvent> events = outboxRepository.findPendingEventType(pageRequest);
 
         List<OutboxEvent> outboxEventList = events.getContent();
 

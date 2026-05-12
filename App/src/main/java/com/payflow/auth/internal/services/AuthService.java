@@ -10,6 +10,7 @@ import com.payflow.auth.internal.repos.RoleRepository;
 import com.payflow.auth.internal.repos.UserRepository;
 import com.payflow.auth.internal.security.JwtTokenGenerator;
 import com.payflow.auth.internal.util.*;
+import com.payflow.common.domain.EventType;
 import com.payflow.common.ex.RoleNotFoundEx;
 import com.payflow.common.ex.UserRegistrationEx;
 import com.payflow.auth.internal.security.AuthenticatedUser;
@@ -77,7 +78,7 @@ public class AuthService {
             OutboxEvent event = new OutboxEvent();
             event.setUserId(createdUser.getUserId());
             event.setPayload(payload);
-            event.setEvent_type("USER_CREATED");
+            event.setEventType(EventType.USER_CREATED);
             event.setStatus(StatusEnum.PENDING);
 
             outboxRepository.save(event);

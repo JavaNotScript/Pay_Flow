@@ -16,5 +16,5 @@ public interface OutboxRepository extends JpaRepository<OutboxEvent, Long> {
     Page<OutboxEvent> findPending(Pageable pageable);
 
     @Query("SELECT e FROM OutboxEvent e WHERE e.status = 'PENDING' AND e.eventType = 'DEPOSIT_REQUEST'")
-    Page<OutboxEvent> findPendingTransactions(Pageable pageRequest);
+    Page<OutboxEvent> findPendingEventType(Pageable pageRequest);
 }

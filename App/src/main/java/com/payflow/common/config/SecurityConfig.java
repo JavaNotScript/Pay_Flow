@@ -29,6 +29,8 @@ import java.util.List;
 public class SecurityConfig {
     private final JwtFilter jwtFilter;
 
+
+    //All internal end points can only be accessed by admins alone -> requestMatchers.hasRole
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity security) throws Exception {
         return security
