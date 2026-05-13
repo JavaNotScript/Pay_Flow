@@ -19,7 +19,7 @@ public class UserCreatedEventHandler {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleEvent(UserCreatedEvent userCreatedEvent) {
         try {
-            walletService.createWallet(userCreatedEvent.userId());
+            walletService.createWallet(userCreatedEvent.userId(), userCreatedEvent.walletTag());
         } catch (WalletCreationEx e) {
             logger.error("Failed to create a wallet for userId={}",userCreatedEvent.userId());
             throw new RuntimeException(e);

@@ -23,7 +23,7 @@ public class WalletEventListener {
                 org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
 
         try {
-            walletService.createWallet(event.userId());
+            walletService.createWallet(event.userId(), event.walletTag());
         }catch (Exception e) {
             logger.error("Error while creating wallet for userId={}", event.userId(), e);
         }
