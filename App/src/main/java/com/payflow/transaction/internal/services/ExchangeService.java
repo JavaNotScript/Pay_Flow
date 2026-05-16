@@ -4,11 +4,9 @@ import com.payflow.common.ex.TransactionException;
 import com.payflow.transaction.internal.domain.CurrencyEnum;
 import com.payflow.transaction.internal.domain.ExchangeRate;
 import com.payflow.transaction.internal.repos.ExchangeRepository;
-import com.payflow.transaction.internal.util.ExchangeResponse;
+import com.payflow.transaction.internal.util.exchange.ExchangeResponse;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -18,19 +16,17 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ExchangeService {
     private final ExchangeRepository exchangeRepository;
-    private final static Logger logger = LoggerFactory.getLogger(ExchangeService.class);
 
-    public ExchangeResponse addRate(BigDecimal buyRate, BigDecimal sellRate, String currency,BigDecimal rateToUsd) {
-        logger.info("currency={}",currency);
+    public ExchangeResponse addRate(BigDecimal buyRate, BigDecimal sellRate, String currency, BigDecimal rateToUsd) {
         CurrencyEnum currencyEnum;
         try {
             currencyEnum = CurrencyEnum.valueOf(currency.trim().toUpperCase());
-        }catch (IllegalArgumentException e){
-            throw new TransactionException("No currency type found of: "+currency);
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("No currency type found of: " + currency);
         }
 
-        if (exchangeRepository.existsByCurrency(currencyEnum)){
-            throw new TransactionException("Exchange for currency already exists try updating"+currencyEnum);
+        if (exchangeRepository.existsByCurrency(currencyEnum)) {
+            throw new TransactionException("Exchange for currency already exists try updating" + currencyEnum);
         }
 
         ExchangeRate rate = new ExchangeRate();
@@ -41,6 +37,26 @@ public class ExchangeService {
 
         ExchangeRate savedRate = exchangeRepository.save(rate);
         return mapToResponse(savedRate);
+    }
+
+    public ExchangeResponse updateRate(BigDecimal buyRate, BigDecimal sellRate, String currency, BigDecimal rateToUsd) {
+        CurrencyEnum currencyEnum;
+        try {
+            currencyEnum = CurrencyEnum.valueOf(currency.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("No currency type found of: " + currency);
+        }
+
+        ExchangeRate exchangeRate = exchangeRepository.findByCurrency(currencyEnum)
+                .orElseThrow(() -> new TransactionException("Currency not found" + currencyEnum));
+
+        exchangeRate.setSellRate(sellRate);
+        exchangeRate.setBuyRate(buyRate);
+        exchangeRate.setRateToUsd(rateToUsd);
+
+        ExchangeRate savedRated = exchangeRepository.save(exchangeRate);
+
+        return mapToResponse(savedRated);
     }
 
     private ExchangeResponse mapToResponse(ExchangeRate savedRate) {

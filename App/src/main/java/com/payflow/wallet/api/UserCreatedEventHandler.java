@@ -1,4 +1,4 @@
-package com.payflow.wallet.api.event;
+package com.payflow.wallet.api;
 
 import com.payflow.common.ex.WalletCreationEx;
 import com.payflow.outbox.UserCreatedEvent;
@@ -21,7 +21,7 @@ public class UserCreatedEventHandler {
         try {
             walletService.createWallet(userCreatedEvent.userId(), userCreatedEvent.walletTag());
         } catch (WalletCreationEx e) {
-            logger.error("Failed to create a wallet for userId={}",userCreatedEvent.userId());
+            logger.error("Failed to create a wallet for userId={}", userCreatedEvent.userId());
             throw new RuntimeException(e);
         }
     }

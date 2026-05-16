@@ -1,9 +1,13 @@
 package com.payflow.transaction.internal.controllers;
 
 import com.payflow.auth.api.AuthFacade;
+import com.payflow.transaction.internal.util.sendRelated.SendMoneyResponse;
 import com.payflow.transaction.internal.services.TransactionService;
-import com.payflow.transaction.internal.util.DepositRequest;
-import com.payflow.transaction.internal.util.DepositResponse;
+import com.payflow.transaction.internal.util.depositRelated.DepositRequest;
+import com.payflow.transaction.internal.util.depositRelated.DepositResponse;
+import com.payflow.transaction.internal.util.sendRelated.SendMoneyRequest;
+import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalRequest;
+import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -25,5 +29,19 @@ public class TransactionController {
         Long userId = authFacade.extractUserId(authentication);
 
         return ResponseEntity.ok(transactionService.requestDeposit(userId, depositRequest.amount(),depositRequest.idempotencyKey(),depositRequest.depositCurrency()));
+    }
+
+    @PostMapping("/send/money")
+    public ResponseEntity<SendMoneyResponse> sendMoney(Authentication authentication, @RequestBody SendMoneyRequest request){
+        Long userId = authFacade.extractUserId(authentication);
+
+        return ResponseEntity.ok(transactionService.sendMoney(userId,request.receiverWalletTag(),request.idempotencyKey(),request.amount(),request.description()));
+    }
+
+    @PostMapping("/withdraw")
+    public ResponseEntity<WithdrawalResponse> withdrawMoney(Authentication authentication, @RequestBody WithdrawalRequest request){
+        Long userId = authFacade.extractUserId(authentication);
+
+        return ResponseEntity.ok(transactionService.withdrawMoneyMpesa(userId,request.amount(),request.idempotencyKey(),request.phoneNumber(),request.description()));
     }
 }

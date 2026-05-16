@@ -1,5 +1,7 @@
 package com.payflow.wallet.internal.services;
 
+import com.payflow.common.ex.InsufficientFundsException;
+import com.payflow.common.ex.WalletCreationEx;
 import com.payflow.common.ex.WalletNotFoundEx;
 import com.payflow.wallet.internal.domain.CurrencyEnum;
 import com.payflow.wallet.internal.domain.StatusEnum;
@@ -28,7 +30,7 @@ public class WalletService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    public void createWallet(Long ownerId) {
+    public void createWallet(Long ownerId, String walletTag) {
         logger.info("Creating wallet for owner id={}", ownerId);
 
         if (walletRepository.existsByOwnerId(ownerId)) {
@@ -38,6 +40,7 @@ public class WalletService {
 
         Wallet wallet = new Wallet();
         wallet.setOwnerId(ownerId);
+        wallet.setWalletTag(walletTag);
         wallet.setCurrency(CurrencyEnum.USD); //always the default currency
         wallet.setBalance(BigDecimal.ZERO);
         wallet.setStatusEnum(StatusEnum.ACTIVE);
@@ -85,22 +88,41 @@ public class WalletService {
         );
     }
 
-    public void depositRequest(Long ownerId, String currency, BigDecimal amount) {
-        Wallet wallet = walletRepository.findByOwnerId(ownerId).orElseThrow(() -> new WalletNotFoundEx("wallet not found"));
+    public void depositRequest(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId).orElseThrow();
 
-        CurrencyEnum currencyEnum;
+        // "If the wallet has an existing balance use it, otherwise start from zero"
+        BigDecimal current = wallet.getBalance() != null ? wallet.getBalance() : BigDecimal.ZERO;
+        wallet.setBalance(current.add(amount));
 
-        try {
-            currencyEnum = CurrencyEnum.valueOf(currency.toUpperCase());
+        walletRepository.save(wallet);
 
-            if (wallet.getCurrency().equals(currencyEnum)) {
-                wallet.setBalance(wallet.getBalance().add(amount));
-            }else {
+    }
 
-            }
+    public void transferRequest(Long creditWalletId, Long senderWalletId, BigDecimal debitAmount, BigDecimal creditAmount) {
+        Wallet senderWallet = walletRepository.findById(senderWalletId)
+                .orElseThrow(() -> new WalletCreationEx("Wallet not found :" + senderWalletId));
 
-        }catch (IllegalArgumentException e) {
-            logger.info("currency not found. ownerId={},currency={}", ownerId, currency, e);
+        BigDecimal currentBalance = senderWallet.getBalance() != null ? senderWallet.getBalance() : BigDecimal.ZERO;
+
+        if (currentBalance.compareTo(debitAmount) < 0) {
+            throw new InsufficientFundsException("Insufficient funds at execution time. Balance: "
+                    + currentBalance + ", Required: " + debitAmount);
         }
+
+        senderWallet.setBalance(currentBalance.subtract(debitAmount));
+
+        walletRepository.save(senderWallet);
+        logger.info("Debit wallet balance deducted and updated successfully");
+
+        Wallet receiverWallet = walletRepository.findById(creditWalletId)
+                .orElseThrow(() -> new WalletCreationEx("Wallet not found :" + creditWalletId));
+
+        BigDecimal walletBalance = receiverWallet.getBalance() != null ? receiverWallet.getBalance() : BigDecimal.ZERO;
+
+        receiverWallet.setBalance(walletBalance.add(creditAmount));
+
+        walletRepository.save(receiverWallet);
+        logger.info("credit wallet balance added and updated successfully");
     }
 }

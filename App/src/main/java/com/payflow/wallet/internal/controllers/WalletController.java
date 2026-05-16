@@ -32,10 +32,4 @@ public class WalletController {
         return ResponseEntity.ok(walletService.updateCurrency(ownerId, request.currency()));
     }
 
-//    @PostMapping("/request/deposit")
-//    public ResponseEntity<DepositResponse> requestDeposit(Authentication authentication, @RequestBody DepositRequest depositRequest) {
-//        AuthenticatedUser user = (AuthenticatedUser) authentication.getPrincipal();
-//        Long ownerId = user.getUserId();
-//        return ResponseEntity.ok(walletService.requestDeposit(ownerId, depositRequest));
-//    }
 }

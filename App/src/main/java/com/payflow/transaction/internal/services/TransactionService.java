@@ -3,17 +3,22 @@ package com.payflow.transaction.internal.services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.payflow.common.domain.EventType;
-import com.payflow.transaction.api.ExchangeAdapter;
-import com.payflow.transaction.internal.domain.*;
+import com.payflow.common.ex.InsufficientFundsException;
 import com.payflow.common.ex.TransactionException;
 import com.payflow.outbox.OutboxEvent;
 import com.payflow.outbox.OutboxRepository;
 import com.payflow.outbox.StatusEnum;
+import com.payflow.transaction.api.ExchangeAdapter;
+import com.payflow.transaction.internal.domain.*;
 import com.payflow.transaction.internal.repos.TransactionRepository;
-import com.payflow.transaction.internal.util.ConversionResult;
-import com.payflow.transaction.internal.util.DepositResponse;
-import com.payflow.wallet.api.WalletFacade;
+import com.payflow.transaction.internal.util.depositRelated.DepositResponse;
+import com.payflow.transaction.internal.util.exchange.ConversionResult;
+import com.payflow.transaction.internal.util.sendRelated.SendMoneyResponse;
+import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalResponse;
+import com.payflow.wallet.api.WalletAdapter;
 import com.payflow.wallet.internal.util.WalletInfo;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +33,15 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class TransactionService {
-    private final WalletFacade walletFacade;
+    private final WalletAdapter walletAdapter;
     private final TransactionRepository transactionRepository;
     private final ObjectMapper objectMapper;
     private final OutboxRepository outboxRepository;
     private final ExchangeAdapter exchangeAdapter;
     private final Logger logger = LoggerFactory.getLogger(TransactionService.class);
 
-    public DepositResponse requestDeposit(Long userId, BigDecimal amount,String idempotencyKey,String depositCurrency) {
-        logger.info("userId={} , amount={} ,idempotencyKey={}, depositCurrency={} ",userId,amount,idempotencyKey,depositCurrency);
+    public DepositResponse requestDeposit(Long userId, BigDecimal amount, String idempotencyKey, String depositCurrency) {
+        logger.info("userId={} , amount={} ,idempotencyKey={}, depositCurrency={} ", userId, amount, idempotencyKey, depositCurrency);
 
         if (idempotencyKey == null || idempotencyKey.isEmpty()) {
             throw new TransactionException("idempotencyKey cannot be null or empty");
@@ -53,32 +58,31 @@ public class TransactionService {
             return mapToResponse(existingTransaction.get());
         }
 
-        WalletInfo walletInfo = walletFacade.getWalletByUserId(userId);
+        WalletInfo walletInfo = walletAdapter.getWalletByUserId(userId);
 
         CurrencyEnum currencyFrom;
         CurrencyEnum currencyTo;
 
         try {
             currencyFrom = CurrencyEnum.valueOf(depositCurrency.trim().toUpperCase());
-        }catch (IllegalArgumentException e){
-            throw new TransactionException("Unsupported deposit currency, "+depositCurrency);
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("Unsupported deposit currency, " + depositCurrency);
         }
 
         try {
             currencyTo = CurrencyEnum.valueOf(walletInfo.currency().trim().toUpperCase());
-        }catch (IllegalArgumentException e){
-            throw new TransactionException("Unsupported wallet currency, "+walletInfo.currency());
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("Unsupported wallet currency, " + walletInfo.currency());
         }
 
-        ConversionResult conversion = exchangeAdapter.convert(amount,currencyFrom,currencyTo);
+        ConversionResult conversion = exchangeAdapter.convert(amount, currencyFrom, currencyTo);
 
-        return persistDeposit(idempotencyKey,walletInfo,amount,currencyFrom,conversion,userId);
+        return persistDeposit(idempotencyKey, walletInfo, amount, currencyFrom, conversion, userId);
     }
-
 
     //refactor to a new bean to prevent it transactional from being skipped
     @Transactional
-    protected DepositResponse persistDeposit(String idempotencyKey, WalletInfo walletInfo,BigDecimal amount,CurrencyEnum currencyFrom,ConversionResult conversion,Long userId){
+    protected DepositResponse persistDeposit(String idempotencyKey, WalletInfo walletInfo, BigDecimal amount, CurrencyEnum currencyFrom, ConversionResult conversion, Long userId) {
 
         try {
             Transaction transaction = new Transaction();
@@ -101,7 +105,7 @@ public class TransactionService {
 
             Transaction savedTransaction = transactionRepository.save(transaction);
 
-            JsonNode payload = objectMapper.valueToTree(Map.of("transactionId",savedTransaction.getTransactionId()));
+            JsonNode payload = objectMapper.valueToTree(Map.of("transactionId", savedTransaction.getTransactionId()));
 
             OutboxEvent outboxEvent = new OutboxEvent();
             outboxEvent.setStatus(StatusEnum.PENDING);
@@ -113,12 +117,130 @@ public class TransactionService {
             outboxRepository.save(outboxEvent);
 
             return mapToResponse(savedTransaction);
-        }catch (DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             Transaction existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
                     .orElseThrow();
 
             return mapToResponse(existingTx);
         }
+    }
+
+    public SendMoneyResponse sendMoney(Long senderId, String receiverWalletTag, String idempotencyKey, BigDecimal amount, String description) {
+        logger.info("senderId={}, receiverWalletTag={}, idempotencyKey={}, amount={},description={}",senderId,receiverWalletTag,idempotencyKey,amount,description);
+        if (idempotencyKey == null || idempotencyKey.isEmpty()) {
+            throw new TransactionException("Idempotency key cannot be null.");
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new TransactionException("Amount needs to be greater than 0.");
+        }
+
+        Optional<Transaction> existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransaction.isPresent()) {
+            logger.warn("unable to process your request because a similar transaction is currently underway. Please wait while we complete your initial request.");
+            return mapToResponseSend(existingTransaction.get());
+        }
+
+        WalletInfo senderWallet = walletAdapter.getWalletByUserId(senderId);
+        WalletInfo receiverWallet = walletAdapter.getWalletByWalletTag(receiverWalletTag);
+
+        if (senderWallet.walletId().equals(receiverWallet.walletId())) {
+            throw new TransactionException("You cannot send money to your own wallet");
+        }
+
+        BigDecimal sendersBalance = walletAdapter.getWalletBalance(senderWallet.walletId());
+
+
+        CurrencyEnum senderCurrency;
+        try {
+            senderCurrency = CurrencyEnum.valueOf(senderWallet.currency().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("Unsupported sender wallet currency: " + senderWallet.currency());
+        }
+
+        CurrencyEnum receiverCurrency;
+        try {
+            receiverCurrency = CurrencyEnum.valueOf(receiverWallet.currency().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("Unsupported receiver wallet currency: " + receiverWallet.currency());
+        }
+
+        ConversionResult conversionResult = exchangeAdapter.convert(amount, senderCurrency, receiverCurrency);
+
+        if (amount.compareTo(sendersBalance) > 0) {
+            throw new InsufficientFundsException("Insufficient funds.");
+        }
+        return persistSendMoney(senderId, senderWallet, receiverWallet, amount, conversionResult.destinationAmount(), idempotencyKey, conversionResult.rateUsed(), description);
+    }
+
+    @Transactional
+    protected SendMoneyResponse persistSendMoney(Long senderId, WalletInfo senderWallet, WalletInfo receiverWallet, BigDecimal sourceAmount, BigDecimal convertedAmount, String idempotencyKey, BigDecimal exchangeRate, String description) {
+        try {
+            Transaction debitTX = new Transaction();
+            debitTX.setSourceWalletId(senderWallet.walletId());
+            debitTX.setSourceCurrency(senderWallet.currency());
+            debitTX.setSourceAmount(sourceAmount);
+
+            debitTX.setWalletDestinationId(receiverWallet.walletId());
+            debitTX.setDestinationCurrency(receiverWallet.currency());
+            debitTX.setDestinationAmount(convertedAmount);
+
+            debitTX.setTransactionStatus(TransactionStatus.PENDING);
+            debitTX.setTransactionDirection(TransactionDirection.DEBIT);
+            debitTX.setPaymentMethod(PaymentMethod.TRANSFER);
+            debitTX.setExchangeRate(exchangeRate);
+            debitTX.setDescription(description);
+            debitTX.setIdempotencyKey(idempotencyKey);
+
+            Transaction creditTx = new Transaction();
+            creditTx.setSourceWalletId(senderWallet.walletId());
+            creditTx.setSourceCurrency(senderWallet.currency());
+            creditTx.setSourceAmount(sourceAmount);
+
+            creditTx.setWalletDestinationId(receiverWallet.walletId());
+            creditTx.setDestinationCurrency(receiverWallet.currency());
+            creditTx.setDestinationAmount(convertedAmount);
+
+            creditTx.setTransactionStatus(TransactionStatus.PENDING);
+            creditTx.setTransactionDirection(TransactionDirection.CREDIT);
+            creditTx.setPaymentMethod(PaymentMethod.TRANSFER);
+            creditTx.setExchangeRate(exchangeRate);
+            creditTx.setDescription(description);
+            creditTx.setIdempotencyKey(idempotencyKey + ":CREDIT");
+
+            Transaction savedTransaction = transactionRepository.save(debitTX);
+            Transaction savedTransactionCredit = transactionRepository.save(creditTx);
+
+            logger.info("debitTransactionId={},creditTransactionId={}",savedTransaction.getTransactionId(),savedTransactionCredit.getTransactionId());
+
+            JsonNode payload = objectMapper.
+                    valueToTree(
+                            Map.of("debitTransactionId", savedTransaction.getTransactionId(),
+                                    "creditTransactionId", savedTransactionCredit.getTransactionId(),
+                                    "senderWalletId", senderWallet.walletId(),
+                                    "receiverWalletId", receiverWallet.walletId(),
+                                    "sourceAmount", sourceAmount,
+                                    "convertedAmount", convertedAmount));
+
+            OutboxEvent outboxEvent = new OutboxEvent();
+            outboxEvent.setStatus(StatusEnum.PENDING);
+            outboxEvent.setUserId(senderId);
+            outboxEvent.setEventType(EventType.TRANSFER_REQUEST);
+            outboxEvent.setPayload(payload);
+            outboxEvent.setRetryCount(0);
+
+            outboxRepository.save(outboxEvent);
+            logger.info("outboxEvent for transaction created");
+
+            return mapToResponseSend(savedTransaction);
+        } catch (DataIntegrityViolationException ex) {
+            Transaction transaction = transactionRepository.findByIdempotencyKey(idempotencyKey)
+                    .orElseThrow();
+
+            return mapToResponseSend(transaction);
+        }
+
     }
 
     private DepositResponse mapToResponse(Transaction transaction) {
@@ -130,5 +252,18 @@ public class TransactionService {
                 transaction.getDestinationCurrency()
 
         );
+    }
+
+    private SendMoneyResponse mapToResponseSend(Transaction transaction) {
+        return new SendMoneyResponse(
+                transaction.getWalletDestinationId(),
+                transaction.getDestinationAmount(),
+                transaction.getTransactionAt(),
+                transaction.getExternalReference()
+        );
+    }
+
+    public WithdrawalResponse withdrawMoneyMpesa(Long userId, @NotBlank BigDecimal amount, @NotBlank String s, @NotBlank @Size(min = 10, max = 12) int i, String description) {
+        throw new RuntimeException();
     }
 }

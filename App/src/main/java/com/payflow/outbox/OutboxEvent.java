@@ -25,10 +25,13 @@ public class OutboxEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "event_id")
-    private Long event_id;
+    private Long eventId;
 
     @Column(name = "user_id", nullable = false)
     private Long userId;
+
+    @Column(name = "wallet_tag")
+    private String walletTag;
 
     @Enumerated(value = EnumType.STRING)
     @Column(name = "event_type")

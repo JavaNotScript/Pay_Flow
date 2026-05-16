@@ -8,12 +8,12 @@ import com.payflow.auth.internal.domain.UserRole;
 import com.payflow.auth.internal.dtos.UserDTO;
 import com.payflow.auth.internal.repos.RoleRepository;
 import com.payflow.auth.internal.repos.UserRepository;
+import com.payflow.auth.internal.security.AuthenticatedUser;
 import com.payflow.auth.internal.security.JwtTokenGenerator;
 import com.payflow.auth.internal.util.*;
 import com.payflow.common.domain.EventType;
 import com.payflow.common.ex.RoleNotFoundEx;
 import com.payflow.common.ex.UserRegistrationEx;
-import com.payflow.auth.internal.security.AuthenticatedUser;
 import com.payflow.outbox.OutboxEvent;
 import com.payflow.outbox.OutboxRepository;
 import com.payflow.outbox.StatusEnum;
@@ -31,6 +31,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -45,10 +46,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
 
     public UserDTO register(RegistrationRequest registrationRequest) {
-        logger.info("Attempting User registration using email={}", registrationRequest.email());
-
         if (userRepository.existsByEmail(registrationRequest.email())) {
-            logger.info("User already exists with email={}", registrationRequest.email());
             throw new UsernameNotFoundException("Email already in use");
         }
 
@@ -60,6 +58,7 @@ public class AuthService {
             user.setPassword(passwordEncoder.encode(registrationRequest.password()));
             user.setFirstName(registrationRequest.firstName());
             user.setLastName(registrationRequest.lastName());
+            user.setWalletTag(generateWalletTag(user.getFirstName()));
             user.setIsLocked(false);
             user.setEnabled(true);
             user.setIsCredentialsExpired(false);
@@ -77,13 +76,12 @@ public class AuthService {
 
             OutboxEvent event = new OutboxEvent();
             event.setUserId(createdUser.getUserId());
+            event.setWalletTag(createdUser.getWalletTag());
             event.setPayload(payload);
             event.setEventType(EventType.USER_CREATED);
             event.setStatus(StatusEnum.PENDING);
 
             outboxRepository.save(event);
-
-            logger.info("User created with email={}", createdUser.getEmail());
             return HelperUtility.convertToDTO(createdUser);
 
         } catch (Exception e) {
@@ -141,5 +139,10 @@ public class AuthService {
 
         user.setPassword(passwordEncoder.encode(request.confirmPassword()));
         return new UpdatePasswordResponse("Password updated successfully.");
+    }
+
+    private String generateWalletTag(String username) {
+        String suffix = String.format("%04d", new Random().nextInt(10000));
+        return username.toLowerCase().replaceAll("\\s+", "_") + "#" + suffix;
     }
 }

@@ -1,9 +1,9 @@
 package com.payflow.auth.internal.controllers;
 
 import com.payflow.auth.internal.dtos.UserDTO;
+import com.payflow.auth.internal.security.AuthenticatedUser;
 import com.payflow.auth.internal.services.AuthService;
 import com.payflow.auth.internal.util.*;
-import com.payflow.auth.internal.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +23,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AccessToken> login(@RequestBody LoginRequest loginRequest) {
-        return ResponseEntity.ok(authService.login(loginRequest.email(),loginRequest.password()));
+        return ResponseEntity.ok(authService.login(loginRequest.email(), loginRequest.password()));
     }
 
     @GetMapping("/me")
@@ -35,18 +35,18 @@ public class AuthController {
     }
 
     @PutMapping("/update/details")
-    public ResponseEntity<UpdateDetailsResponse> updateDetails(Authentication authentication,@Valid @RequestBody UpdateDetailsRequest request) {
+    public ResponseEntity<UpdateDetailsResponse> updateDetails(Authentication authentication, @Valid @RequestBody UpdateDetailsRequest request) {
         AuthenticatedUser user = (AuthenticatedUser) authentication.getPrincipal();
         Long userId = user.getUserId();
 
-        return ResponseEntity.ok(authService.updateDetails(userId,request));
+        return ResponseEntity.ok(authService.updateDetails(userId, request));
     }
 
     @PutMapping("/update/password")
-    public ResponseEntity<UpdatePasswordResponse> updatePassword(Authentication authentication,@Valid @RequestBody UpdatePasswordRequest request) {
+    public ResponseEntity<UpdatePasswordResponse> updatePassword(Authentication authentication, @Valid @RequestBody UpdatePasswordRequest request) {
         AuthenticatedUser user = (AuthenticatedUser) authentication.getPrincipal();
         Long userId = user.getUserId();
 
-        return ResponseEntity.ok(authService.updatePassword(userId,request));
+        return ResponseEntity.ok(authService.updatePassword(userId, request));
     }
 }

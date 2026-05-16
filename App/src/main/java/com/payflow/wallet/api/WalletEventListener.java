@@ -1,4 +1,4 @@
-package com.payflow.wallet.api.event;
+package com.payflow.wallet.api;
 
 import com.payflow.outbox.UserCreatedEvent;
 import com.payflow.wallet.internal.services.WalletService;

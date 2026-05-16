@@ -1,4 +1,4 @@
-package com.payflow.transaction.internal.util;
+package com.payflow.transaction.internal.util.depositRelated;
 
 import java.math.BigDecimal;
 

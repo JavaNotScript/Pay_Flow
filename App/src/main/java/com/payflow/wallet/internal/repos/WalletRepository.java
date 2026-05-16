@@ -12,4 +12,6 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
     @Query("SELECT w FROM Wallet w WHERE w.ownerId =:ownerId")
     Optional<Wallet> findByOwnerId(@Param("ownerId") Long ownerId);
+
+    Optional<Wallet> findByWalletTag(String receiverWalletTag);
 }

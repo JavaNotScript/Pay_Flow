@@ -5,4 +5,6 @@ import com.payflow.wallet.internal.util.WalletInfo;
 public interface WalletFacade {
 
     WalletInfo getWalletByUserId(Long userId);
+
+    WalletInfo getWalletByWalletTag(String receiverWalletTag);
 }

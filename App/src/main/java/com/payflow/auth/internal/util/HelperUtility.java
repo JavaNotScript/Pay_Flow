@@ -10,7 +10,8 @@ public class HelperUtility {
                 user.getUserId(),
                 user.getEmail(),
                 user.getFirstName(),
-                user.getLastName()
+                user.getLastName(),
+                user.getWalletTag()
         );
     }
 }

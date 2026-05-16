@@ -2,18 +2,14 @@ package com.payflow.transaction.api;
 
 import com.payflow.common.ex.TransactionException;
 import com.payflow.transaction.internal.domain.CurrencyEnum;
-import com.payflow.transaction.internal.domain.ExchangeRate;
 import com.payflow.transaction.internal.repos.ExchangeRepository;
-import com.payflow.transaction.internal.util.ConversionResult;
+import com.payflow.transaction.internal.util.exchange.ConversionResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -28,7 +24,7 @@ public class ExchangeAdapter implements ExchangeFacade {
 
 
 //        Map<CurrencyEnum, BigDecimal> rates = exchangeRepository
-//                .findByCurrencyIn(List.of(from, to))
+//                .findByCurrency In(List.of(from, to))
 //                .stream()
 //                .collect(Collectors.toMap(ExchangeRate::getCurrency, ExchangeRate::getRateToUsd));
 
@@ -41,7 +37,7 @@ public class ExchangeAdapter implements ExchangeFacade {
         BigDecimal toRate = to == CurrencyEnum.USD
                 ? BigDecimal.ONE
                 : exchangeRepository.findByCurrency(to)
-                .orElseThrow(() -> new TransactionException("No exchange rate found to "+to)).
+                .orElseThrow(() -> new TransactionException("No exchange rate found to " + to)).
                 getRateToUsd();
 
 

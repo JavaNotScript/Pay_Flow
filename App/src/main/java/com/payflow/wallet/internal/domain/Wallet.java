@@ -29,6 +29,9 @@ public class Wallet {
     @Column(name = "owner_Id",nullable = false)
     private Long ownerId;
 
+    @Column(name = "wallet_tag", nullable = false,unique = true)
+    private String walletTag;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "currency",nullable = false)
     private CurrencyEnum currency;

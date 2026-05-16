@@ -1,27 +1,27 @@
 package com.payflow.transaction.internal.controllers;
 
 import com.payflow.transaction.internal.services.ExchangeService;
-import com.payflow.transaction.internal.util.ExchangeRequest;
-import com.payflow.transaction.internal.util.ExchangeResponse;
+import com.payflow.transaction.internal.util.exchange.ExchangeRequest;
+import com.payflow.transaction.internal.util.exchange.ExchangeResponse;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/internal/exchange")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 public class ExchangeController {
     private final ExchangeService exchangeService;
-    private static final Logger logger = LoggerFactory.getLogger(ExchangeController.class);
 
     @PostMapping("/add/rate")
-    public ResponseEntity<ExchangeResponse> addRate(@RequestBody ExchangeRequest request){
-        logger.info("Currency={}",request.currency());
-        return ResponseEntity.ok(exchangeService.addRate(request.buyRate(),request.sellRate(),request.currency(),request.rateToUsd()));
+    public ResponseEntity<ExchangeResponse> addRate(@RequestBody ExchangeRequest request) {
+        return ResponseEntity.ok(exchangeService.addRate(request.buyRate(), request.sellRate(), request.currency(), request.rateToUsd()));
+    }
+
+    @PutMapping("/update/rate")
+    public ResponseEntity<ExchangeResponse> updateRate(@RequestBody ExchangeRequest request) {
+        return ResponseEntity.ok(exchangeService.updateRate(request.buyRate(), request.sellRate(), request.currency(), request.rateToUsd()));
     }
 }
