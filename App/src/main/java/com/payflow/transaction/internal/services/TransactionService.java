@@ -17,8 +17,6 @@ import com.payflow.transaction.internal.util.sendRelated.SendMoneyResponse;
 import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalResponse;
 import com.payflow.wallet.api.WalletAdapter;
 import com.payflow.wallet.internal.util.WalletInfo;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +37,8 @@ public class TransactionService {
     private final OutboxRepository outboxRepository;
     private final ExchangeAdapter exchangeAdapter;
     private final Logger logger = LoggerFactory.getLogger(TransactionService.class);
+
+    //refactor all protected methods to a new bean to prevent it transactional from being skipped
 
     public DepositResponse requestDeposit(Long userId, BigDecimal amount, String idempotencyKey, String depositCurrency) {
         logger.info("userId={} , amount={} ,idempotencyKey={}, depositCurrency={} ", userId, amount, idempotencyKey, depositCurrency);
@@ -80,7 +80,6 @@ public class TransactionService {
         return persistDeposit(idempotencyKey, walletInfo, amount, currencyFrom, conversion, userId);
     }
 
-    //refactor to a new bean to prevent it transactional from being skipped
     @Transactional
     protected DepositResponse persistDeposit(String idempotencyKey, WalletInfo walletInfo, BigDecimal amount, CurrencyEnum currencyFrom, ConversionResult conversion, Long userId) {
 
@@ -126,7 +125,7 @@ public class TransactionService {
     }
 
     public SendMoneyResponse sendMoney(Long senderId, String receiverWalletTag, String idempotencyKey, BigDecimal amount, String description) {
-        logger.info("senderId={}, receiverWalletTag={}, idempotencyKey={}, amount={},description={}",senderId,receiverWalletTag,idempotencyKey,amount,description);
+        logger.info("senderId={}, receiverWalletTag={}, idempotencyKey={}, amount={},description={}", senderId, receiverWalletTag, idempotencyKey, amount, description);
         if (idempotencyKey == null || idempotencyKey.isEmpty()) {
             throw new TransactionException("Idempotency key cannot be null.");
         }
@@ -212,7 +211,7 @@ public class TransactionService {
             Transaction savedTransaction = transactionRepository.save(debitTX);
             Transaction savedTransactionCredit = transactionRepository.save(creditTx);
 
-            logger.info("debitTransactionId={},creditTransactionId={}",savedTransaction.getTransactionId(),savedTransactionCredit.getTransactionId());
+            logger.info("debitTransactionId={},creditTransactionId={}", savedTransaction.getTransactionId(), savedTransactionCredit.getTransactionId());
 
             JsonNode payload = objectMapper.
                     valueToTree(
@@ -263,7 +262,95 @@ public class TransactionService {
         );
     }
 
-    public WithdrawalResponse withdrawMoneyMpesa(Long userId, @NotBlank BigDecimal amount, @NotBlank String s, @NotBlank @Size(min = 10, max = 12) int i, String description) {
-        throw new RuntimeException();
+    public WithdrawalResponse withdrawMoneyMpesa(Long senderId, BigDecimal amount, String idempotencyKey, String mpesaPhoneNumber, String description) {
+        if (idempotencyKey == null || idempotencyKey.isEmpty()) {
+            throw new TransactionException("IdempotencyKey cannot be null");
+        }
+
+        if (mpesaPhoneNumber == null || !mpesaPhoneNumber.matches("^254[0-9]{9}s")){
+            throw new TransactionException("Invalid mpesa phone number.");
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new TransactionException("Amount has to be higher than 0.");
+        }
+
+        Optional<Transaction> existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransaction.isPresent()) {
+            return mapToResponseWithdraw(existingTransaction.get());
+        }
+
+        WalletInfo senderWallet = walletAdapter.getWalletByUserId(senderId);
+        BigDecimal senderBalance = walletAdapter.getWalletBalance(senderWallet.walletId());
+
+        CurrencyEnum senderWalletCurrency;
+        CurrencyEnum mpesaCurrency = CurrencyEnum.KES;
+
+        try {
+            senderWalletCurrency = CurrencyEnum.valueOf(senderWallet.currency().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new TransactionException("Unsupported sender wallet currency: " + senderWallet.currency());
+        }
+
+        if (amount.compareTo(senderBalance) > 0){
+            throw new InsufficientFundsException("Insufficient funds.");
+        }
+        ConversionResult conversionResult = exchangeAdapter.convert(amount, senderWalletCurrency, mpesaCurrency);
+
+        return persistWithdrawalMpesa(senderId, senderWallet, amount, conversionResult.destinationAmount(), conversionResult.rateUsed(), description, idempotencyKey, mpesaPhoneNumber);
+    }
+
+    @Transactional
+    protected WithdrawalResponse persistWithdrawalMpesa(Long senderId, WalletInfo senderWallet, BigDecimal sourceAmount, BigDecimal destinationAmount, BigDecimal rateUsed, String description, String idempotencyKey, String mpesaPhoneNumber) {
+        try {
+            Transaction transaction = new Transaction();
+            transaction.setIdempotencyKey(idempotencyKey);
+            transaction.setDescription(description);
+            transaction.setPaymentMethod(PaymentMethod.WITHDRAWAL);
+            transaction.setTransactionDirection(TransactionDirection.DEBIT);
+            transaction.setExchangeRate(rateUsed);
+            transaction.setTransactionStatus(TransactionStatus.PENDING);
+
+            transaction.setSourceWalletId(senderWallet.walletId());
+            transaction.setSourceCurrency(senderWallet.currency());
+            transaction.setSourceAmount(sourceAmount);
+            transaction.setDestinationAmount(destinationAmount);
+            transaction.setDestinationCurrency(CurrencyEnum.KES.name());
+
+            Transaction savedTransaction = transactionRepository.save(transaction);
+
+            JsonNode payload = objectMapper.valueToTree(
+                    Map.of(
+                            "transactionId", savedTransaction.getTransactionId(),
+                            "mpesaPhoneNumber", mpesaPhoneNumber
+                    )
+            );
+
+            OutboxEvent event = new OutboxEvent();
+            event.setStatus(StatusEnum.PENDING);
+            event.setPayload(payload);
+            event.setUserId(senderId);
+            event.setEventType(EventType.WITHDRAWAL_REQUEST);
+            event.setRetryCount(0);
+
+
+            outboxRepository.save(event);
+            return mapToResponseWithdraw(transaction);
+        } catch (DataIntegrityViolationException ex) {
+            Transaction transaction = transactionRepository.findByIdempotencyKey(idempotencyKey)
+                    .orElseThrow();
+            return mapToResponseWithdraw(transaction);
+        }
+    }
+
+
+    private WithdrawalResponse mapToResponseWithdraw(Transaction existingTransaction) {
+        return new WithdrawalResponse(
+                existingTransaction.getExternalReference(),
+                existingTransaction.getDestinationAmount(),
+                existingTransaction.getTransactionAt(),
+                existingTransaction.getDescription()
+        );
     }
 }

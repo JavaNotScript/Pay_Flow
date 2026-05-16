@@ -45,6 +45,7 @@ public class AuthService {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final PasswordEncoder passwordEncoder;
 
+    //add email verification and phoneNumber
     public UserDTO register(RegistrationRequest registrationRequest) {
         if (userRepository.existsByEmail(registrationRequest.email())) {
             throw new UsernameNotFoundException("Email already in use");
