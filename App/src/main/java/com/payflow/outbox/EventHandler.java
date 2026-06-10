@@ -2,6 +2,7 @@ package com.payflow.outbox;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.payflow.common.ex.TransactionException;
+import com.payflow.mpesa.service.MpesaB2CService;
 import com.payflow.transaction.api.TransactionFacade;
 import com.payflow.transaction.internal.util.TransactionDTO;
 import com.payflow.wallet.internal.services.WalletService;
@@ -21,6 +22,7 @@ public class EventHandler {
     private final WalletService walletService;
     private final OutboxRepository outboxRepository;
     private final TransactionFacade transactionFacade;
+    private final MpesaB2CService mpesaB2CService;
 
     @Transactional
     public void processSingleEvent(OutboxEvent event) {
@@ -108,8 +110,6 @@ public class EventHandler {
                 .map(JsonNode::asLong)
                 .orElseThrow(() -> new TransactionException("Missing creditTransactionId in payload: " + payload));
 
-//        Long debitTransactionId = event.getPayload().get("debitTransactionId").asLong();
-//        Long creditTransactionId = event.getPayload().get("creditTransactionId").asLong();
 
         TransactionDTO debitTransactionDTO = transactionFacade.findTransactionById(debitTransactionId);
         TransactionDTO creditTransactionDTO = transactionFacade.findTransactionById(creditTransactionId);
@@ -142,5 +142,49 @@ public class EventHandler {
         }
 
         outboxRepository.save(lockedEvent);
+    }
+
+    @Transactional
+    public void processWithdrawalTransferRequests(OutboxEvent event){
+       OutboxEvent lockedEvent = outboxRepository.findByIdWithLock(event.getEventId()).orElseThrow();
+
+       if (lockedEvent.getStatus() != StatusEnum.PENDING){
+           return;
+       }
+
+       JsonNode payload = lockedEvent.getPayload();
+
+       Long transactionId = Optional.ofNullable(payload.get("transactionId"))
+               .map(JsonNode::asLong)
+               .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal missing transactionId"));
+
+       String phoneNumber = Optional.ofNullable(payload.get("phoneNumber"))
+               .map(JsonNode::asText)
+               .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal transaction missing receivers phone number"));
+
+       TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
+
+       try {
+           walletService.debitWallet(transactionDTO.walletSourceId(),transactionDTO.sourceAmount());
+
+           mpesaB2CService.sendB2C(phoneNumber,transactionDTO.destinationAmount(),String.valueOf(transactionId),transactionDTO.description());
+
+           transactionFacade.updateTransactionStatus(transactionId,"PROCESSING");
+
+           lockedEvent.setStatus(StatusEnum.PROCESSED);
+           lockedEvent.setProcessedAt(OffsetDateTime.now());
+       }catch (Exception ex) {
+           // reverse debit if M-Pesa call failed
+           walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+
+           lockedEvent.setRetryCount(lockedEvent.getRetryCount() + 1);
+           lockedEvent.setLastAttemptAt(OffsetDateTime.now());
+           lockedEvent.setErrorMessage(ex.getMessage());
+           lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5
+                   ? StatusEnum.FAILED : StatusEnum.PENDING);
+       }
+
+        outboxRepository.save(lockedEvent);
+
     }
 }

@@ -125,4 +125,18 @@ public class WalletService {
         walletRepository.save(receiverWallet);
         logger.info("credit wallet balance added and updated successfully");
     }
+
+    public void reverseDebit(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId).orElseThrow();
+
+        wallet.setBalance(wallet.getBalance().add(amount));
+        walletRepository.save(wallet);
+    }
+
+    public void debitWallet(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId).orElseThrow();
+
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        walletRepository.save(wallet);
+    }
 }

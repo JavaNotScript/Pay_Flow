@@ -57,4 +57,16 @@ public class OutboxProcessor {
         }
     }
 
+    @Scheduled(fixedDelay = 5000)
+    public void processMpesaWithdrawalRequest(){
+        Pageable pageable = PageRequest.of(0,30,Sort.by("createdAt").ascending());
+        Page<OutboxEvent> outboxEvents = outboxRepository.findByStatusAndEventTypeOrderByCreatedAtAsc(StatusEnum.PENDING,EventType.WITHDRAWAL_REQUEST,pageable);
+        List<OutboxEvent> outboxEventList = outboxEvents.getContent();
+
+
+        for (OutboxEvent event:outboxEventList){
+            eventHandler.processWithdrawalTransferRequests(event);
+        }
+    }
+
 }

@@ -22,7 +22,8 @@ public class TransactionAdapter implements TransactionFacade {
                 transaction.getSourceWalletId(),
                 transaction.getDestinationCurrency(),
                 transaction.getDestinationAmount(),
-                transaction.getSourceAmount()
+                transaction.getSourceAmount(),
+                transaction.getDescription()
         );
     }
 
