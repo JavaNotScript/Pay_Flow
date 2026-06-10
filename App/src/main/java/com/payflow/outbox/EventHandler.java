@@ -1,6 +1,7 @@
 package com.payflow.outbox;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.payflow.common.ex.MpesaWafBlockException;
 import com.payflow.common.ex.TransactionException;
 import com.payflow.mpesa.service.MpesaB2CService;
 import com.payflow.transaction.api.TransactionFacade;
@@ -130,7 +131,7 @@ public class EventHandler {
             lockedEvent.setErrorMessage(ex.getMessage());
 
             if (lockedEvent.getRetryCount() >= 5) {
-                logger.warn("EventId={} failed, error message={}",lockedEvent.getEventId(),lockedEvent.getErrorMessage());
+                logger.warn("EventId={} failed, error message={}", lockedEvent.getEventId(), lockedEvent.getErrorMessage());
                 lockedEvent.setStatus(StatusEnum.FAILED);
 
                 transactionFacade.updateTransactionStatus(debitTransactionId, "FAILED");
@@ -145,44 +146,54 @@ public class EventHandler {
     }
 
     @Transactional
-    public void processWithdrawalTransferRequests(OutboxEvent event){
-       OutboxEvent lockedEvent = outboxRepository.findByIdWithLock(event.getEventId()).orElseThrow();
+    public void processWithdrawalTransferRequests(OutboxEvent event) {
+        OutboxEvent lockedEvent = outboxRepository.findByIdWithLock(event.getEventId()).orElseThrow();
 
-       if (lockedEvent.getStatus() != StatusEnum.PENDING){
-           return;
-       }
+        if (lockedEvent.getStatus() != StatusEnum.PENDING) {
+            return;
+        }
 
-       JsonNode payload = lockedEvent.getPayload();
+        JsonNode payload = lockedEvent.getPayload();
 
-       Long transactionId = Optional.ofNullable(payload.get("transactionId"))
-               .map(JsonNode::asLong)
-               .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal missing transactionId"));
+        Long transactionId = Optional.ofNullable(payload.get("transactionId"))
+                .map(JsonNode::asLong)
+                .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal missing transactionId"));
 
-       String phoneNumber = Optional.ofNullable(payload.get("phoneNumber"))
-               .map(JsonNode::asText)
-               .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal transaction missing receivers phone number"));
+        String phoneNumber = Optional.ofNullable(payload.get("mpesaPhoneNumber"))
+                .map(JsonNode::asText)
+                .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal transaction missing receivers phone number"));
 
-       TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
+        TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
 
-       try {
-           walletService.debitWallet(transactionDTO.walletSourceId(),transactionDTO.sourceAmount());
+        try {
+            walletService.debitWallet(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
 
-           mpesaB2CService.sendB2C(phoneNumber,transactionDTO.destinationAmount(),String.valueOf(transactionId),transactionDTO.description());
+            mpesaB2CService.sendB2C(phoneNumber, transactionDTO.destinationAmount(), String.valueOf(transactionId), transactionDTO.description());
 
-           transactionFacade.updateTransactionStatus(transactionId,"PROCESSING");
+            transactionFacade.updateTransactionStatus(transactionId, "PROCESSING");
 
-           lockedEvent.setStatus(StatusEnum.PROCESSED);
-           lockedEvent.setProcessedAt(OffsetDateTime.now());
-       }catch (Exception ex) {
-           // reverse debit if M-Pesa call failed
-           walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+            lockedEvent.setStatus(StatusEnum.PROCESSED);
+            lockedEvent.setProcessedAt(OffsetDateTime.now());
+        } catch (MpesaWafBlockException ex) {
+            walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+            lockedEvent.setStatus(StatusEnum.PENDING);
+            lockedEvent.setErrorMessage(ex.getMessage());
+            lockedEvent.setLastAttemptAt(OffsetDateTime.now());
 
-           lockedEvent.setRetryCount(lockedEvent.getRetryCount() + 1);
-           lockedEvent.setLastAttemptAt(OffsetDateTime.now());
-           lockedEvent.setErrorMessage(ex.getMessage());
-           lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5
-                   ? StatusEnum.FAILED : StatusEnum.PENDING);
-       }
+            // do NOT increment retryCount
+            logger.warn("WAF block detected, pausing withdrawal event id={}", lockedEvent.getEventId());
+
+        } catch (Exception ex) {
+            // reverse debit if M-Pesa call failed
+            walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+
+            lockedEvent.setRetryCount(lockedEvent.getRetryCount() + 1);
+            lockedEvent.setLastAttemptAt(OffsetDateTime.now());
+            lockedEvent.setErrorMessage(ex.getMessage());
+            lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5
+                    ? StatusEnum.FAILED : StatusEnum.PENDING);
+            logger.info("withdrawal request failed, transactionId={},amount={},walletId={},error={}", transactionId, transactionDTO.destinationAmount(), transactionDTO.walletSourceId(), ex.getMessage(), ex);
+        }
 
         outboxRepository.save(lockedEvent);
 

@@ -3,6 +3,8 @@ package com.payflow.mpesa.service;
 import com.payflow.mpesa.dto.AccessTokenResponse;
 import com.payflow.mpesa.dto.MpesaConfiguration;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -19,13 +21,15 @@ import java.util.Map;
 public class MpesaB2CService {
     private final MpesaConfiguration mpesaConfiguration;
     private final MpesaAuthService mpesaAuthService;
+    private final Logger logger = LoggerFactory.getLogger(MpesaB2CService.class);
 
     public void sendB2C(String phoneNumber, BigDecimal amount,String transactionId,String description){
         AccessTokenResponse accessToken = mpesaAuthService.generateAccessToken();
+        logger.info("accessToken={}",accessToken);
 
         Map<String,Object> body = Map.of(
                 "OriginatorConversationID",transactionId,
-                "InitiatorName","Martin Mwangi",
+                "InitiatorName","testapi",
                 "SecurityCredential",mpesaConfiguration.getSecurityCredential(),
                 "CommandID","BusinessPayment",
                 "Amount",amount.setScale(0, RoundingMode.FLOOR).toString(),

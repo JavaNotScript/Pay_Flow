@@ -267,8 +267,8 @@ public class TransactionService {
             throw new TransactionException("IdempotencyKey cannot be null");
         }
 
-        if (mpesaPhoneNumber == null || !mpesaPhoneNumber.matches("^254[0-9]{9}s")){
-            throw new TransactionException("Invalid mpesa phone number.");
+        if (mpesaPhoneNumber == null || !mpesaPhoneNumber.matches("^254[0-9]{9}$")){
+            throw new TransactionException("Invalid mpesa phone number."+mpesaPhoneNumber);
         }
 
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -278,6 +278,7 @@ public class TransactionService {
         Optional<Transaction> existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existingTransaction.isPresent()) {
+            logger.info("existing transaction found");
             return mapToResponseWithdraw(existingTransaction.get());
         }
 
@@ -303,6 +304,7 @@ public class TransactionService {
 
     @Transactional
     protected WithdrawalResponse persistWithdrawalMpesa(Long senderId, WalletInfo senderWallet, BigDecimal sourceAmount, BigDecimal destinationAmount, BigDecimal rateUsed, String description, String idempotencyKey, String mpesaPhoneNumber) {
+        logger.info("persisting mpesa withdrawal");
         try {
             Transaction transaction = new Transaction();
             transaction.setIdempotencyKey(idempotencyKey);

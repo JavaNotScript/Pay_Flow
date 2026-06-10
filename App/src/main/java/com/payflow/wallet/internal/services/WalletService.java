@@ -129,14 +129,21 @@ public class WalletService {
     public void reverseDebit(Long walletId, BigDecimal amount) {
         Wallet wallet = walletRepository.findById(walletId).orElseThrow();
 
-        wallet.setBalance(wallet.getBalance().add(amount));
+        BigDecimal balance = wallet.getBalance() != null ? wallet.getBalance() : BigDecimal.ZERO;
+
+        wallet.setBalance(balance.add(amount));
         walletRepository.save(wallet);
     }
 
+    @Transactional
     public void debitWallet(Long walletId, BigDecimal amount) {
+        logger.info("Debiting walletId={}",walletId);
         Wallet wallet = walletRepository.findById(walletId).orElseThrow();
 
-        wallet.setBalance(wallet.getBalance().subtract(amount));
+        BigDecimal balance = wallet.getBalance() != null ? wallet.getBalance() : BigDecimal.ZERO;
+        logger.info("wallet balance={}",balance);
+
+        wallet.setBalance(balance.subtract(amount));
         walletRepository.save(wallet);
     }
 }

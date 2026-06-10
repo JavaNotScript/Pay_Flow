@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/transactions")
+@RequestMapping("/api/v1/transaction")
 @RequiredArgsConstructor
 public class TransactionController {
     private final AuthFacade authFacade;
@@ -38,7 +38,7 @@ public class TransactionController {
         return ResponseEntity.ok(transactionService.sendMoney(userId,request.receiverWalletTag(),request.idempotencyKey(),request.amount(),request.description()));
     }
 
-    @PostMapping("/withdraw")
+    @PostMapping("/request/withdraw/mpesa")
     public ResponseEntity<WithdrawalResponse> withdrawMoney(Authentication authentication, @RequestBody WithdrawalRequest request){
         Long userId = authFacade.extractUserId(authentication);
 

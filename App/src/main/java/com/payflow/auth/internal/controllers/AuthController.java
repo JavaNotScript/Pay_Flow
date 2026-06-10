@@ -17,13 +17,19 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<UserDTO> register(@Valid @RequestBody RegistrationRequest registrationRequest) {
+    public ResponseEntity<String> register(@Valid @RequestBody RegistrationRequest registrationRequest) {
         return ResponseEntity.ok(authService.register(registrationRequest));
     }
 
     @PostMapping("/login")
     public ResponseEntity<AccessToken> login(@RequestBody LoginRequest loginRequest) {
         return ResponseEntity.ok(authService.login(loginRequest.email(), loginRequest.password()));
+    }
+
+    @PostMapping("/verify/email")
+    public ResponseEntity<UserDTO> verifyAccount(@RequestBody VerificationRequest request){
+        System.out.println("email verification endpoint");
+        return ResponseEntity.ok(authService.verifyEmail(request.token()));
     }
 
     @GetMapping("/me")

@@ -2,18 +2,19 @@ package com.payflow.auth.internal.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.payflow.auth.internal.domain.RoleType;
-import com.payflow.auth.internal.domain.User;
-import com.payflow.auth.internal.domain.UserRole;
+import com.payflow.auth.internal.domain.*;
 import com.payflow.auth.internal.dtos.UserDTO;
 import com.payflow.auth.internal.repos.RoleRepository;
 import com.payflow.auth.internal.repos.UserRepository;
+import com.payflow.auth.internal.repos.VerificationTokenRepository;
 import com.payflow.auth.internal.security.AuthenticatedUser;
 import com.payflow.auth.internal.security.JwtTokenGenerator;
 import com.payflow.auth.internal.util.*;
+import com.payflow.common.MailingService;
 import com.payflow.common.domain.EventType;
 import com.payflow.common.ex.RoleNotFoundEx;
 import com.payflow.common.ex.UserRegistrationEx;
+import com.payflow.common.ex.VerificationTokenEx;
 import com.payflow.outbox.OutboxEvent;
 import com.payflow.outbox.OutboxRepository;
 import com.payflow.outbox.StatusEnum;
@@ -30,6 +31,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Random;
 
@@ -44,25 +46,21 @@ public class AuthService {
     private final ObjectMapper objectMapper;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final PasswordEncoder passwordEncoder;
-
+    private final TokenHashingService hashingService;
+    private final VerificationTokenRepository verificationTokenRepository;
+    private final MailingService mailingService;
     //add email verification and phoneNumber
-    public UserDTO register(RegistrationRequest registrationRequest) {
+
+    public String register(RegistrationRequest registrationRequest) {
         if (userRepository.existsByEmail(registrationRequest.email())) {
             throw new UsernameNotFoundException("Email already in use");
         }
-
-
-        try {
             User user = new User();
 
             user.setEmail(registrationRequest.email());
             user.setPassword(passwordEncoder.encode(registrationRequest.password()));
             user.setFirstName(registrationRequest.firstName());
             user.setLastName(registrationRequest.lastName());
-            user.setWalletTag(generateWalletTag(user.getFirstName()));
-            user.setIsLocked(false);
-            user.setEnabled(true);
-            user.setIsCredentialsExpired(false);
 
             UserRole role = roleRepository.findByRoleName(RoleType.USER).orElseThrow(() -> new RoleNotFoundEx("Role not found"));
 
@@ -70,24 +68,20 @@ public class AuthService {
 
             User createdUser = userRepository.save(user);
 
+            String token = HelperUtility.generateRefreshToken();
+            String hashedToken = hashingService.getHashedToken(token);
 
-            //Record user created to assist dealing with orphan wallets in case of wallet creation fails
-            JsonNode payload = objectMapper.valueToTree(
-                    Map.of("userId", createdUser.getUserId()));
+            VerificationToken verificationToken = new VerificationToken();
+            verificationToken.setExpiresAt(OffsetDateTime.now().plusSeconds(1300));
+            verificationToken.setTokenHash(hashedToken);
+            verificationToken.setUser(user);
+            verificationToken.setTokenType(TokenType.VERIFICATION_TOKEN);
 
-            OutboxEvent event = new OutboxEvent();
-            event.setUserId(createdUser.getUserId());
-            event.setWalletTag(createdUser.getWalletTag());
-            event.setPayload(payload);
-            event.setEventType(EventType.USER_CREATED);
-            event.setStatus(StatusEnum.PENDING);
+            verificationTokenRepository.save(verificationToken);
 
-            outboxRepository.save(event);
-            return HelperUtility.convertToDTO(createdUser);
+            mailingService.sendMail("Verify your PAYFLOW account \n"+token,createdUser.getEmail(),"PAYFLOW ACCOUNT VERIFICATION");
 
-        } catch (Exception e) {
-            throw new UserRegistrationEx("User registration failed.");
-        }
+            return "Pending email verification";
     }
 
     public AccessToken login(String email, String password) {
@@ -145,5 +139,48 @@ public class AuthService {
     private String generateWalletTag(String username) {
         String suffix = String.format("%04d", new Random().nextInt(10000));
         return username.toLowerCase().replaceAll("\\s+", "_") + "#" + suffix;
+    }
+
+    @Transactional
+    public UserDTO verifyEmail(String verificationToken) {
+        VerificationToken token = verificationTokenRepository.findByTokenHash(hashingService.getHashedToken(verificationToken)).orElseThrow();
+
+        if (token.getExpiresAt().isBefore(OffsetDateTime.now())|| token.isUsed()){
+            throw new VerificationTokenEx("Verification token already expired/used");
+        }
+
+        if (token.getTokenType() != TokenType.VERIFICATION_TOKEN){
+            throw new VerificationTokenEx("Invalid verification token type");
+        }
+
+        token.setUsed(true);
+        token.setUsedAt(OffsetDateTime.now());
+
+        try{
+            User user = userRepository.findById(token.getUser().getUserId()).orElseThrow();
+
+            user.setWalletTag(generateWalletTag(user.getFirstName()));
+            user.setIsLocked(false);
+            user.setEnabled(true);
+            user.setIsCredentialsExpired(false);
+
+            //Record user created to assist dealing with orphan wallets in case of wallet creation fails
+            JsonNode payload = objectMapper.valueToTree(
+                    Map.of("userId", user.getUserId()));
+
+            OutboxEvent event = new OutboxEvent();
+            event.setUserId(user.getUserId());
+            event.setWalletTag(user.getWalletTag());
+            event.setPayload(payload);
+            event.setEventType(EventType.USER_CREATED);
+            event.setStatus(StatusEnum.PENDING);
+
+            outboxRepository.save(event);
+            return HelperUtility.convertToDTO(user);
+
+        } catch (Exception e) {
+            throw new UserRegistrationEx("User registration failed.");
+        }
+
     }
 }
