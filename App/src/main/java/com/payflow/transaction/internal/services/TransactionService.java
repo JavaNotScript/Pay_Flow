@@ -278,7 +278,6 @@ public class TransactionService {
         Optional<Transaction> existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existingTransaction.isPresent()) {
-            logger.info("existing transaction found");
             return mapToResponseWithdraw(existingTransaction.get());
         }
 
@@ -304,7 +303,6 @@ public class TransactionService {
 
     @Transactional
     protected WithdrawalResponse persistWithdrawalMpesa(Long senderId, WalletInfo senderWallet, BigDecimal sourceAmount, BigDecimal destinationAmount, BigDecimal rateUsed, String description, String idempotencyKey, String mpesaPhoneNumber) {
-        logger.info("persisting mpesa withdrawal");
         try {
             Transaction transaction = new Transaction();
             transaction.setIdempotencyKey(idempotencyKey);

@@ -57,7 +57,7 @@ public class OutboxProcessor {
         }
     }
 
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelay = 30000)
     public void processMpesaWithdrawalRequest(){
         Pageable pageable = PageRequest.of(0,30,Sort.by("createdAt").ascending());
         Page<OutboxEvent> outboxEvents = outboxRepository.findByStatusAndEventTypeOrderByCreatedAtAsc(StatusEnum.PENDING,EventType.WITHDRAWAL_REQUEST,pageable);

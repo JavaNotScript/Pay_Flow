@@ -23,11 +23,6 @@ public class ExchangeAdapter implements ExchangeFacade {
         }
 
 
-//        Map<CurrencyEnum, BigDecimal> rates = exchangeRepository
-//                .findByCurrency In(List.of(from, to))
-//                .stream()
-//                .collect(Collectors.toMap(ExchangeRate::getCurrency, ExchangeRate::getRateToUsd));
-
         BigDecimal fromRate = from == CurrencyEnum.USD
                 ? BigDecimal.ONE
                 : exchangeRepository.findByCurrency(from)

@@ -33,8 +33,8 @@ public class MpesaConfiguration {
     private String b2cUrl;
 
     @Value("${mpesa.b2c.queue.timeout.url}")
-    private String queueTimeOutUrl;
+    private String queueTimeOutURL;
 
     @Value("${mpesa.b2c.result-url}")
-    private String resultUrl;
+    private String resultURL;
 }

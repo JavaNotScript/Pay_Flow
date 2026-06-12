@@ -192,7 +192,7 @@ public class EventHandler {
             lockedEvent.setErrorMessage(ex.getMessage());
             lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5
                     ? StatusEnum.FAILED : StatusEnum.PENDING);
-            logger.info("withdrawal request failed, transactionId={},amount={},walletId={},error={}", transactionId, transactionDTO.destinationAmount(), transactionDTO.walletSourceId(), ex.getMessage(), ex);
+//            logger.info("withdrawal request failed, transactionId={},amount={},walletId={},error={}", transactionId, transactionDTO.destinationAmount(), transactionDTO.walletSourceId(), ex.getMessage(), ex);
         }
 
         outboxRepository.save(lockedEvent);

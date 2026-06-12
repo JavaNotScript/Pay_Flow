@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 
 import static com.payflow.mpesa.util.Constants.*;
 
@@ -24,19 +25,23 @@ public class MpesaAuthService {
     private final OkHttpClient okHttpClient;
     private final ObjectMapper objectMapper;
     private final Logger logger = LoggerFactory.getLogger(MpesaAuthService.class);
+    private AccessTokenResponse cachedToken;
+    private Instant expiryTime;
+
+    public synchronized String getAccessToken(){
+        if (cachedToken != null && Instant.now().isBefore(expiryTime)){
+            return cachedToken.getAccessToken();
+        }
+
+        cachedToken = generateAccessToken();
+        expiryTime = Instant.now().plusSeconds(Long.parseLong(cachedToken.getExpiresIn()) - 60); // 60s buffer
+        return cachedToken.getAccessToken();
+    }
 
     public AccessTokenResponse generateAccessToken() {
         String credentials = String.format("%s:%s", mpesaConfiguration.getConsumerKey(), mpesaConfiguration.getConsumerSecret());
 
         String encodedCredentials = HelperUtility.toBase64(credentials);
-
-
-        logger.info("Using consumerKey='{}' consumerSecret='{}'",
-                mpesaConfiguration.getConsumerKey(),
-                mpesaConfiguration.getConsumerSecret());
-        logger.info("Encoded credentials='{}'", encodedCredentials);
-
-
 
         Request request = new Request.Builder()
                 .url(String.format("%s?grant_type=%s", mpesaConfiguration.getOauthEndpoint(), mpesaConfiguration.getGrantType()))
@@ -51,7 +56,11 @@ public class MpesaAuthService {
             assert response.body() != null;
 
             String responseBody = response.body().string();
-            logger.info("Mpesa auth response code={} body={}", response.code(), responseBody);
+//            logger.info("Mpesa auth response code={} body={}", response.code(), responseBody);
+
+            if (responseBody.trim().isEmpty()) {
+                throw new MpesaWafBlockException("Mpesa auth returned empty body — likely Incapsula throttling. Code=" + response.code());
+            }
 
             if (responseBody.trim().startsWith("<")) {
                 throw new MpesaWafBlockException("Mpesa returned HTML instead of JSON. Possible WAF block.");
@@ -68,7 +77,7 @@ public class MpesaAuthService {
             return tokenResponse;
 
         } catch (IOException e) {
-            logger.error("Failed to generate access token", e); // ✅ log the actual exception
+            logger.error("Failed to generate access token", e);
             throw new RuntimeException("Failed to generate mpesa access token", e);
         }
 
