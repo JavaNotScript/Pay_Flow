@@ -1,13 +1,14 @@
 package com.payflow.mpesa.service;
 
-import com.payflow.mpesa.dto.AccessTokenResponse;
 import com.payflow.mpesa.dto.MpesaConfiguration;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -24,8 +25,10 @@ public class MpesaB2CService {
 
     public void sendB2C(String phoneNumber, BigDecimal amount, String transactionId, String description) {
         String accessToken = mpesaAuthService.getAccessToken();
+        logger.info("Access token used for B2C: '{}'", accessToken);
 
-        String originatorConversationId = transactionId + "-" + UUID.randomUUID().toString().substring(0, 8);
+        String originatorConversationId = UUID.randomUUID().toString();
+
         Map<String, Object> body = Map.of(
                 "OriginatorConversationID", originatorConversationId,
                 "InitiatorName", "testapi",
@@ -39,12 +42,13 @@ public class MpesaB2CService {
                 "ResultURL", mpesaConfiguration.getResultURL()
         );
 
+        logger.info("request body={}",body);
+
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         RestTemplate restTemplate = new RestTemplate();
         restTemplate.exchange(mpesaConfiguration.getB2cUrl(), HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
-
     }
 }

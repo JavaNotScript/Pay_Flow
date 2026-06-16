@@ -5,7 +5,6 @@ import com.payflow.common.ex.MpesaWafBlockException;
 import com.payflow.mpesa.dto.AccessTokenResponse;
 import com.payflow.mpesa.dto.MpesaConfiguration;
 import com.payflow.mpesa.util.HelperUtility;
-import lombok.RequiredArgsConstructor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -19,7 +18,6 @@ import java.time.Instant;
 import static com.payflow.mpesa.util.Constants.*;
 
 @Service
-@RequiredArgsConstructor
 public class MpesaAuthService {
     private final MpesaConfiguration mpesaConfiguration;
     private final OkHttpClient okHttpClient;
@@ -28,13 +26,24 @@ public class MpesaAuthService {
     private AccessTokenResponse cachedToken;
     private Instant expiryTime;
 
+    public MpesaAuthService(MpesaConfiguration mpesaConfiguration, OkHttpClient okHttpClient, ObjectMapper objectMapper) {
+        this.mpesaConfiguration = mpesaConfiguration;
+        this.okHttpClient = okHttpClient;
+        this.objectMapper = objectMapper;
+    }
+
     public synchronized String getAccessToken(){
         if (cachedToken != null && Instant.now().isBefore(expiryTime)){
             return cachedToken.getAccessToken();
         }
 
         cachedToken = generateAccessToken();
-        expiryTime = Instant.now().plusSeconds(Long.parseLong(cachedToken.getExpiresIn()) - 60); // 60s buffer
+
+        if (cachedToken.getAccessToken() == null || cachedToken.getAccessToken().isBlank()) {
+            throw new MpesaWafBlockException("Received empty access token");
+        }
+
+        expiryTime = Instant.now().plusSeconds(Long.parseLong(cachedToken.getExpiresIn()) - 60);
         return cachedToken.getAccessToken();
     }
 

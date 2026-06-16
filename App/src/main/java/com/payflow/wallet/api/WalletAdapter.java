@@ -27,11 +27,12 @@ public class WalletAdapter implements WalletFacade {
     @Override
     public WalletInfo getWalletByUserId(Long userId) {
         try {
-            Wallet wallet = walletRepository.findByOwnerId(userId).orElseThrow();
+            Wallet wallet = walletRepository.findByOwnerId(userId).orElseThrow(() -> new WalletCreationEx("Wallet not found for userID "+userId));
 
             return new WalletInfo(
                     wallet.getWalletId(),
-                    wallet.getCurrency().name()
+                    wallet.getCurrency().name(),
+                    wallet.getWalletTag()
             );
 
         }catch (WalletNotFoundEx e){
@@ -48,7 +49,8 @@ public class WalletAdapter implements WalletFacade {
 
             return new WalletInfo(
                     wallet.getWalletId(),
-                    wallet.getCurrency().name()
+                    wallet.getCurrency().name(),
+                    wallet.getWalletTag()
             );
         }catch (WalletNotFoundEx e){
             logger.error("Wallet not found= {}",receiverWalletTag);

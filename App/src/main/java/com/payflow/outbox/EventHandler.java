@@ -164,18 +164,22 @@ public class EventHandler {
                 .orElseThrow(() -> new TransactionException("payload for mpesa withdrawal transaction missing receivers phone number"));
 
         TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
+        transactionFacade.updateTransactionStatus(transactionId, "PROCESSING");
 
         try {
             walletService.debitWallet(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
 
             mpesaB2CService.sendB2C(phoneNumber, transactionDTO.destinationAmount(), String.valueOf(transactionId), transactionDTO.description());
 
-            transactionFacade.updateTransactionStatus(transactionId, "PROCESSING");
+            transactionFacade.updateTransactionStatus(transactionId, "SUCCESS");
+
 
             lockedEvent.setStatus(StatusEnum.PROCESSED);
             lockedEvent.setProcessedAt(OffsetDateTime.now());
         } catch (MpesaWafBlockException ex) {
             walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+            transactionFacade.updateTransactionStatus(transactionId, "REVERSED");
+
             lockedEvent.setStatus(StatusEnum.PENDING);
             lockedEvent.setErrorMessage(ex.getMessage());
             lockedEvent.setLastAttemptAt(OffsetDateTime.now());
@@ -186,13 +190,14 @@ public class EventHandler {
         } catch (Exception ex) {
             // reverse debit if M-Pesa call failed
             walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
+            transactionFacade.updateTransactionStatus(transactionId, "REVERSED");
 
             lockedEvent.setRetryCount(lockedEvent.getRetryCount() + 1);
             lockedEvent.setLastAttemptAt(OffsetDateTime.now());
             lockedEvent.setErrorMessage(ex.getMessage());
             lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5
                     ? StatusEnum.FAILED : StatusEnum.PENDING);
-//            logger.info("withdrawal request failed, transactionId={},amount={},walletId={},error={}", transactionId, transactionDTO.destinationAmount(), transactionDTO.walletSourceId(), ex.getMessage(), ex);
+            logger.info("withdrawal request failed, transactionId={},amount={},walletId={},error={}", transactionId, transactionDTO.destinationAmount(), transactionDTO.walletSourceId(), ex.getMessage(), ex);
         }
 
         outboxRepository.save(lockedEvent);

@@ -14,6 +14,7 @@ import com.payflow.transaction.internal.repos.TransactionRepository;
 import com.payflow.transaction.internal.util.depositRelated.DepositResponse;
 import com.payflow.transaction.internal.util.exchange.ConversionResult;
 import com.payflow.transaction.internal.util.sendRelated.SendMoneyResponse;
+import com.payflow.transaction.internal.util.TransactionStatementDTO;
 import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalResponse;
 import com.payflow.wallet.api.WalletAdapter;
 import com.payflow.wallet.internal.util.WalletInfo;
@@ -21,12 +22,15 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -242,26 +246,6 @@ public class TransactionService {
 
     }
 
-    private DepositResponse mapToResponse(Transaction transaction) {
-        return new DepositResponse(
-                transaction.getTransactionId(),
-                transaction.getWalletDestinationId(),
-                transaction.getTransactionStatus().name(),
-                transaction.getDestinationAmount(),
-                transaction.getDestinationCurrency()
-
-        );
-    }
-
-    private SendMoneyResponse mapToResponseSend(Transaction transaction) {
-        return new SendMoneyResponse(
-                transaction.getWalletDestinationId(),
-                transaction.getDestinationAmount(),
-                transaction.getTransactionAt(),
-                transaction.getExternalReference()
-        );
-    }
-
     public WithdrawalResponse withdrawMoneyMpesa(Long senderId, BigDecimal amount, String idempotencyKey, String mpesaPhoneNumber, String description) {
         if (idempotencyKey == null || idempotencyKey.isEmpty()) {
             throw new TransactionException("IdempotencyKey cannot be null");
@@ -344,6 +328,25 @@ public class TransactionService {
         }
     }
 
+    public Page<TransactionStatementDTO> getTransactionStatement(Long walletId){
+        Pageable pageable = PageRequest.of(0,10, Sort.by("transactionAt").ascending());
+        Page<Transaction> transactionPage = transactionRepository.findBySourceWalletId(walletId,pageable);
+
+        List<Transaction> transactionList = transactionPage.getContent();
+
+        if(transactionList.isEmpty()){
+            logger.info("List is empty");
+            return new PageImpl<>(List.of(),pageable,transactionPage.getTotalElements());
+        }
+
+        return new PageImpl<>(transactionStatementDTOList(transactionList));
+    }
+
+    public TransactionStatementDTO getTransactionStatementById(Long walletId,Long transactionId){
+        Transaction transaction = transactionRepository.findTransactionForWalletById(walletId,transactionId).orElseThrow(() -> new TransactionException("Transaction not found"));
+
+        return convertToDTO(transaction);
+    }
 
     private WithdrawalResponse mapToResponseWithdraw(Transaction existingTransaction) {
         return new WithdrawalResponse(
@@ -353,4 +356,43 @@ public class TransactionService {
                 existingTransaction.getDescription()
         );
     }
+
+    private DepositResponse mapToResponse(Transaction transaction) {
+        return new DepositResponse(
+                transaction.getTransactionId(),
+                transaction.getWalletDestinationId(),
+                transaction.getTransactionStatus().name(),
+                transaction.getDestinationAmount(),
+                transaction.getDestinationCurrency()
+
+        );
+    }
+
+    private SendMoneyResponse mapToResponseSend(Transaction transaction) {
+        return new SendMoneyResponse(
+                transaction.getWalletDestinationId(),
+                transaction.getDestinationAmount(),
+                transaction.getTransactionAt(),
+                transaction.getExternalReference()
+        );
+    }
+
+    private TransactionStatementDTO convertToDTO(Transaction transaction){
+        return new TransactionStatementDTO(
+                transaction.getTransactionId(),
+                transaction.getSourceWalletId(),
+                transaction.getWalletDestinationId(),
+                transaction.getSourceAmount(),
+                transaction.getTransactionStatus().name(),
+                transaction.getTransactionAt()
+        );
+    }
+
+    private List<TransactionStatementDTO> transactionStatementDTOList(List<Transaction> transactions){
+        return transactions
+                .stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
 }

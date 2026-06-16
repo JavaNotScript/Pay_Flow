@@ -6,15 +6,16 @@ import com.payflow.transaction.internal.services.TransactionService;
 import com.payflow.transaction.internal.util.depositRelated.DepositRequest;
 import com.payflow.transaction.internal.util.depositRelated.DepositResponse;
 import com.payflow.transaction.internal.util.sendRelated.SendMoneyRequest;
+import com.payflow.transaction.internal.util.TransactionStatementDTO;
 import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalRequest;
 import com.payflow.transaction.internal.util.withdrawalRelated.WithdrawalResponse;
+import com.payflow.wallet.api.WalletAdapter;
+import com.payflow.wallet.internal.util.WalletInfo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/transaction")
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TransactionController {
     private final AuthFacade authFacade;
     private final TransactionService transactionService;
+    private final WalletAdapter walletAdapter;
 
 
     @PostMapping("/request/deposit")
@@ -43,5 +45,22 @@ public class TransactionController {
         Long userId = authFacade.extractUserId(authentication);
 
         return ResponseEntity.ok(transactionService.withdrawMoneyMpesa(userId,request.amount(),request.idempotencyKey(),request.phoneNumber(),request.description()));
+    }
+
+    @GetMapping("/get/statement")
+    public ResponseEntity<Page<TransactionStatementDTO>> getTransactionStatement(Authentication authentication){
+        Long userId = authFacade.extractUserId(authentication);
+
+        WalletInfo walletInfo = walletAdapter.getWalletByUserId(userId);
+
+        return ResponseEntity.ok(transactionService.getTransactionStatement(walletInfo.walletId()));
+    }
+
+    @GetMapping("/get/statement/{transactionId}")
+    public TransactionStatementDTO getTransactionStatementById(Authentication authentication,@PathVariable Long transactionId){
+        Long userId = authFacade.extractUserId(authentication);
+
+        WalletInfo walletInfo = walletAdapter.getWalletByUserId(userId);
+        return ResponseEntity.ok(transactionService.getTransactionStatementById(walletInfo.walletId(),transactionId)).getBody();
     }
 }
