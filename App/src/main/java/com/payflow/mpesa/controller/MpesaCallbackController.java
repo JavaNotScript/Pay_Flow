@@ -4,13 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.payflow.mpesa.dto.AccessTokenResponse;
 import com.payflow.mpesa.service.MpesaAuthService;
 import com.payflow.transaction.api.TransactionAdapter;
+import com.payflow.transaction.internal.util.TransactionDTO;
 import com.payflow.wallet.api.WalletAdapter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/mpesa")
+@RequestMapping("/api/v1/mpesa")
 @RequiredArgsConstructor
 public class MpesaCallbackController {
     private final TransactionAdapter transactionAdapter;
@@ -20,6 +21,32 @@ public class MpesaCallbackController {
     @GetMapping("/token")
     public ResponseEntity<AccessTokenResponse> getAccessToken(){
         return ResponseEntity.ok(authService.generateAccessToken());
+    }
+
+    @PostMapping("/stk/callback")
+    public ResponseEntity<Void> handleStkCallBack(@RequestBody JsonNode payload){
+
+        JsonNode stkCallBack = payload.path("body").path("stkcallback");
+        int resultCode  = stkCallBack.path("ResultCode").asInt();
+
+        String accountReference = stkCallBack.path("CallBackMetadata")
+                .path("Item")
+                .findValuesAsText("AccountReference")
+                .stream().findFirst()
+                .orElse(null);
+
+        if (resultCode == 0){
+            Long transactionId = Long.parseLong("accountReference");
+            TransactionDTO transactionDTO = transactionAdapter.findTransactionById(transactionId);
+
+            walletAdapter.depositRequest(transactionDTO.walletDestinationId(),transactionDTO.destinationAmount());
+            transactionAdapter.updateTransactionStatus(transactionId,"SUCCESS");
+        }else {
+            Long transactionId = Long.parseLong("accountReference");
+            transactionAdapter.updateTransactionStatus(transactionId,"FAILED");
+        }
+
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/b2c/result")

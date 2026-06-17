@@ -37,4 +37,16 @@ public class MpesaConfiguration {
 
     @Value("${mpesa.b2c.result-url}")
     private String resultURL;
+
+    @Value("${mpesa.stk-url}")
+    private String stkURL;
+
+    @Value("${mpesa.passkey}")
+    private String passkey;
+
+    @Value("${mpesa.call-back-url}")
+    private String callBackURL;
+
+    @Value("${transaction_type}")
+    private String transactionType;
 }

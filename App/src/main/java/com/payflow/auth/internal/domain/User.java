@@ -33,6 +33,9 @@ public class User {
     @Column(name = "last_name")
     private String lastName;
 
+    @Column(name = "mpesa_phone_number")
+    private String mpesaPhoneNumber;
+
     @Column(name = "wallet_tag")
     private String walletTag;
 

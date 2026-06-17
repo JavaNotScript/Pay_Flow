@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.payflow.common.ex.MpesaWafBlockException;
 import com.payflow.common.ex.TransactionException;
 import com.payflow.mpesa.service.MpesaB2CService;
+import com.payflow.mpesa.service.MpesaStkService;
 import com.payflow.transaction.api.TransactionFacade;
 import com.payflow.transaction.internal.util.TransactionDTO;
 import com.payflow.wallet.internal.services.WalletService;
@@ -24,6 +25,7 @@ public class EventHandler {
     private final OutboxRepository outboxRepository;
     private final TransactionFacade transactionFacade;
     private final MpesaB2CService mpesaB2CService;
+    private final MpesaStkService mpesaStkService;
 
     @Transactional
     public void processSingleEvent(OutboxEvent event) {
@@ -57,7 +59,7 @@ public class EventHandler {
     }
 
     @Transactional
-    public void processDepositEvent(OutboxEvent event) {
+    public void processSTKPushDepositEvent(OutboxEvent event) {
         OutboxEvent lockedEvent = outboxRepository.findByIdWithLock(event.getEventId())
                 .orElseThrow();
 
@@ -65,29 +67,28 @@ public class EventHandler {
             return;
         }
 
-        Long transactionId = event.getPayload().get("transactionId").asLong();
+        JsonNode payload = event.getPayload();
+        Long transactionId = payload.get("transactionId").asLong();
+        String mpesaPhoneNumber = payload.get("mpesaPhoneNumber").asText();
+
         TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
-        transactionFacade.updateTransactionStatus(transactionId, "PROCESSING");
 
         try {
-            walletService.depositRequest(transactionDTO.walletDestinationId(), transactionDTO.destinationAmount());
+            mpesaStkService.initiateSTKPush(mpesaPhoneNumber,transactionDTO.sourceAmount(),transactionId);
 
+            transactionFacade.updateTransactionStatus(transactionId,"PROCESSING");
             lockedEvent.setStatus(StatusEnum.PROCESSED);
             lockedEvent.setProcessedAt(OffsetDateTime.now());
 
-            transactionFacade.updateTransactionStatus(transactionId, "SUCCESS");
-
-        } catch (Exception ex) {
-            lockedEvent.setRetryCount(lockedEvent.getRetryCount() + 1);
+        }catch (MpesaWafBlockException ex){
+            lockedEvent.setStatus(StatusEnum.PENDING);
             lockedEvent.setLastAttemptAt(OffsetDateTime.now());
             lockedEvent.setErrorMessage(ex.getMessage());
-
-            if (lockedEvent.getRetryCount() >= 5) {
-                lockedEvent.setStatus(StatusEnum.FAILED);
-                transactionFacade.updateTransactionStatus(transactionId, "FAILED");
-            } else {
-                lockedEvent.setStatus(StatusEnum.PENDING);
-            }
+        }catch (Exception e){
+            lockedEvent.setRetryCount(lockedEvent.getRetryCount()+1);
+            lockedEvent.setLastAttemptAt(OffsetDateTime.now());
+            lockedEvent.setErrorMessage(e.getMessage());
+            lockedEvent.setStatus(lockedEvent.getRetryCount() >= 5 ? StatusEnum.FAILED:StatusEnum.PENDING);
         }
         outboxRepository.save(lockedEvent);
     }
@@ -178,7 +179,7 @@ public class EventHandler {
             lockedEvent.setProcessedAt(OffsetDateTime.now());
         } catch (MpesaWafBlockException ex) {
             walletService.reverseDebit(transactionDTO.walletSourceId(), transactionDTO.sourceAmount());
-            transactionFacade.updateTransactionStatus(transactionId, "REVERSED");
+            transactionFacade.updateTransactionStatus(transactionId, "PENDING");
 
             lockedEvent.setStatus(StatusEnum.PENDING);
             lockedEvent.setErrorMessage(ex.getMessage());
@@ -203,4 +204,5 @@ public class EventHandler {
         outboxRepository.save(lockedEvent);
 
     }
+
 }

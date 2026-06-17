@@ -44,8 +44,8 @@ public class TransactionService {
 
     //refactor all protected methods to a new bean to prevent it transactional from being skipped
 
-    public DepositResponse requestDeposit(Long userId, BigDecimal amount, String idempotencyKey, String depositCurrency) {
-        logger.info("userId={} , amount={} ,idempotencyKey={}, depositCurrency={} ", userId, amount, idempotencyKey, depositCurrency);
+    public DepositResponse requestDepositMpesa(Long userId, BigDecimal amount, String idempotencyKey, String mpesaPhoneNumber) {
+        logger.info("userId={} , amount={} ,idempotencyKey={}, mpesaPhoneNumber={} ", userId, amount, idempotencyKey, mpesaPhoneNumber);
 
         if (idempotencyKey == null || idempotencyKey.isEmpty()) {
             throw new TransactionException("idempotencyKey cannot be null or empty");
@@ -55,6 +55,11 @@ public class TransactionService {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new TransactionException("Amount must be greater than zero");
         }
+
+        if (mpesaPhoneNumber == null || !mpesaPhoneNumber.matches("^254[0-9]{9}$")){
+            throw new TransactionException("Invalid mpesa phone number");
+        }
+
         Optional<Transaction> existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         //prevents duplicate transactions
@@ -64,14 +69,8 @@ public class TransactionService {
 
         WalletInfo walletInfo = walletAdapter.getWalletByUserId(userId);
 
-        CurrencyEnum currencyFrom;
+        CurrencyEnum currencyFrom = CurrencyEnum.KES;
         CurrencyEnum currencyTo;
-
-        try {
-            currencyFrom = CurrencyEnum.valueOf(depositCurrency.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new TransactionException("Unsupported deposit currency, " + depositCurrency);
-        }
 
         try {
             currencyTo = CurrencyEnum.valueOf(walletInfo.currency().trim().toUpperCase());
@@ -81,11 +80,11 @@ public class TransactionService {
 
         ConversionResult conversion = exchangeAdapter.convert(amount, currencyFrom, currencyTo);
 
-        return persistDeposit(idempotencyKey, walletInfo, amount, currencyFrom, conversion, userId);
+        return persistDepositMpesa(userId,walletInfo,amount,idempotencyKey, currencyFrom, conversion, mpesaPhoneNumber);
     }
 
     @Transactional
-    protected DepositResponse persistDeposit(String idempotencyKey, WalletInfo walletInfo, BigDecimal amount, CurrencyEnum currencyFrom, ConversionResult conversion, Long userId) {
+    protected DepositResponse persistDepositMpesa(Long userId,WalletInfo walletInfo,BigDecimal amount,String idempotencyKey, CurrencyEnum currencyFrom, ConversionResult conversion,String mpesaPhoneNumber) {
 
         try {
             Transaction transaction = new Transaction();
@@ -108,12 +107,15 @@ public class TransactionService {
 
             Transaction savedTransaction = transactionRepository.save(transaction);
 
-            JsonNode payload = objectMapper.valueToTree(Map.of("transactionId", savedTransaction.getTransactionId()));
+            JsonNode payload = objectMapper.valueToTree(
+                    Map.of("transactionId", savedTransaction.getTransactionId(),
+                            "mpesaPhoneNumber",mpesaPhoneNumber
+            ));
 
             OutboxEvent outboxEvent = new OutboxEvent();
             outboxEvent.setStatus(StatusEnum.PENDING);
             outboxEvent.setUserId(userId);
-            outboxEvent.setEventType(EventType.DEPOSIT_REQUEST);
+            outboxEvent.setEventType(EventType.STK_PUSH_REQUEST);
             outboxEvent.setPayload(payload);
             outboxEvent.setRetryCount(0);
 

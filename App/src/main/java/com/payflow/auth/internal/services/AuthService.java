@@ -55,12 +55,17 @@ public class AuthService {
         if (userRepository.existsByEmail(registrationRequest.email())) {
             throw new UsernameNotFoundException("Email already in use");
         }
+
+        if (!registrationRequest.mpesaPhoneNumber().matches("^254[0-9]{9}$")){
+            throw new UserRegistrationEx("Incorrect mpesa phone number");
+        }
             User user = new User();
 
             user.setEmail(registrationRequest.email());
             user.setPassword(passwordEncoder.encode(registrationRequest.password()));
             user.setFirstName(registrationRequest.firstName());
             user.setLastName(registrationRequest.lastName());
+            user.setMpesaPhoneNumber(registrationRequest.mpesaPhoneNumber());
 
             UserRole role = roleRepository.findByRoleName(RoleType.USER).orElseThrow(() -> new RoleNotFoundEx("Role not found"));
 
@@ -166,7 +171,8 @@ public class AuthService {
 
             //Record user created to assist dealing with orphan wallets in case of wallet creation fails
             JsonNode payload = objectMapper.valueToTree(
-                    Map.of("userId", user.getUserId()));
+                    Map.of("userId", user.getUserId(),
+                            "mpesaPhoneNumber",user.getMpesaPhoneNumber()));
 
             OutboxEvent event = new OutboxEvent();
             event.setUserId(user.getUserId());

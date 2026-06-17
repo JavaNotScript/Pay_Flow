@@ -75,4 +75,8 @@ public class WalletAdapter implements WalletFacade {
 
         walletService.reverseDebit(transactionDTO.walletSourceId(),transactionDTO.sourceAmount());
     }
+
+    public void depositRequest(Long walletId, BigDecimal amount) {
+        walletService.depositRequest(walletId,amount);
+    }
 }

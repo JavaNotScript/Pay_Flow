@@ -1,9 +1,11 @@
 package com.payflow.transaction.internal.controllers;
 
+import com.payflow.auth.api.AuthAdapter;
 import com.payflow.auth.api.AuthFacade;
+import com.payflow.auth.internal.dtos.UserDTO;
 import com.payflow.transaction.internal.util.sendRelated.SendMoneyResponse;
 import com.payflow.transaction.internal.services.TransactionService;
-import com.payflow.transaction.internal.util.depositRelated.DepositRequest;
+import com.payflow.transaction.internal.util.depositRelated.DepositRequestMpesa;
 import com.payflow.transaction.internal.util.depositRelated.DepositResponse;
 import com.payflow.transaction.internal.util.sendRelated.SendMoneyRequest;
 import com.payflow.transaction.internal.util.TransactionStatementDTO;
@@ -24,13 +26,15 @@ public class TransactionController {
     private final AuthFacade authFacade;
     private final TransactionService transactionService;
     private final WalletAdapter walletAdapter;
+    private final AuthAdapter authAdapter;
 
 
-    @PostMapping("/request/deposit")
-    public ResponseEntity<DepositResponse> requestDeposit(Authentication authentication, @RequestBody DepositRequest depositRequest) {
-        Long userId = authFacade.extractUserId(authentication);
+    @PostMapping("/request/deposit/mpesa")
+    public ResponseEntity<DepositResponse> requestDepositMpesa(Authentication authentication, @RequestBody DepositRequestMpesa depositRequestMpesa) {
+        Long userId = authAdapter.extractUserId(authentication);
+        UserDTO mpesaPhoneNumber = authAdapter.getUserInfoByUserId(userId);
 
-        return ResponseEntity.ok(transactionService.requestDeposit(userId, depositRequest.amount(),depositRequest.idempotencyKey(),depositRequest.depositCurrency()));
+        return ResponseEntity.ok(transactionService.requestDepositMpesa(userId, depositRequestMpesa.amount(), depositRequestMpesa.idempotencyKey(),mpesaPhoneNumber.getMpesaPhoneNumber()));
     }
 
     @PostMapping("/send/money")

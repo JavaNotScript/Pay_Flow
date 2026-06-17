@@ -41,7 +41,7 @@ public class OutboxProcessor {
         List<OutboxEvent> outboxEventList = events.getContent();
 
         for (OutboxEvent event : outboxEventList) {
-            eventHandler.processDepositEvent(event);
+            eventHandler.processSTKPushDepositEvent(event);
         }
     }
 
