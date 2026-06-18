@@ -71,10 +71,12 @@ public class EventHandler {
         Long transactionId = payload.get("transactionId").asLong();
         String mpesaPhoneNumber = payload.get("mpesaPhoneNumber").asText();
 
+
         TransactionDTO transactionDTO = transactionFacade.findTransactionById(transactionId);
 
         try {
             mpesaStkService.initiateSTKPush(mpesaPhoneNumber,transactionDTO.sourceAmount(),transactionId);
+            logger.info("initiated an stk push");
 
             transactionFacade.updateTransactionStatus(transactionId,"PROCESSING");
             lockedEvent.setStatus(StatusEnum.PROCESSED);

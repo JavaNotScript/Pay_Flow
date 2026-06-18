@@ -47,6 +47,6 @@ public class MpesaConfiguration {
     @Value("${mpesa.call-back-url}")
     private String callBackURL;
 
-    @Value("${transaction_type}")
+    @Value("${mpesa.transaction-type}")
     private String transactionType;
 }

@@ -15,7 +15,8 @@ public class HelperUtility {
                 user.getEmail(),
                 user.getFirstName(),
                 user.getLastName(),
-                user.getWalletTag()
+                user.getWalletTag(),
+                user.getMpesaPhoneNumber()
         );
     }
 

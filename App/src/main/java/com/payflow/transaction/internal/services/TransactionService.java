@@ -85,7 +85,6 @@ public class TransactionService {
 
     @Transactional
     protected DepositResponse persistDepositMpesa(Long userId,WalletInfo walletInfo,BigDecimal amount,String idempotencyKey, CurrencyEnum currencyFrom, ConversionResult conversion,String mpesaPhoneNumber) {
-
         try {
             Transaction transaction = new Transaction();
             transaction.setWalletDestinationId(walletInfo.walletId());

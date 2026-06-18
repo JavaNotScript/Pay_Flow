@@ -33,10 +33,10 @@ public class OutboxProcessor {
         }
     }
 
-    @Scheduled(fixedDelay = 5000)
-    public void processDepositRequests() {
+    @Scheduled(fixedDelay = 30000)
+    public void processMpesaSTKDepositRequests() {
         Pageable pageRequest = PageRequest.of(0, 20, Sort.by("createdAt").ascending());
-        Page<OutboxEvent> events = outboxRepository.findByStatusAndEventTypeOrderByCreatedAtAsc(StatusEnum.PENDING, EventType.DEPOSIT_REQUEST, pageRequest);
+        Page<OutboxEvent> events = outboxRepository.findByStatusAndEventTypeOrderByCreatedAtAsc(StatusEnum.PENDING, EventType.STK_PUSH_REQUEST, pageRequest);
 
         List<OutboxEvent> outboxEventList = events.getContent();
 
